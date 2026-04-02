@@ -5,11 +5,11 @@ import { firebaseConfig } from './firebase-config.js';
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const params = new URLSearchParams(location.search);
-const roomCode = params.get('room');
-const myRole = params.get('role');
+const roomCode = (params.get('room') || '').trim();
+const myRole = ((params.get('role') || '').trim().toUpperCase() === 'X') ? 'X' : 'O';
 const roomRef = ref(db, `rooms/${roomCode}`);
 
-if(!roomCode || !myRole){ location.href = './index.html'; }
+if(!roomCode){ location.href = './index.html'; }
 
 const boardEl = document.getElementById('board');
 for(let i=0;i<9;i++){
@@ -28,12 +28,12 @@ let countdownInterval = null;
 let lastNormalizedJSON = '';
 
 function clone(obj){ return JSON.parse(JSON.stringify(obj)); }
-function wins(){ return [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,4,8],[0,4,8],[2,4,6]]; }
+function wins(){ return [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]]; }
 function checkWin(grid){ return wins().some(l => grid[l[0]] && grid[l[0]]===grid[l[1]] && grid[l[1]]===grid[l[2]]); }
 function basePlayer(){ return { hp:100, sp:0, skillUsed:0, stunned:false, defending:false }; }
 function defaultState(host='O'){
   return {
-    turn: host || 'O',
+    turn: host === 'X' ? 'X' : 'O',
     grid: Array(9).fill(null),
     queues: { O: [], X: [] },
     data: { O: basePlayer(), X: basePlayer() },
@@ -59,23 +59,42 @@ function normalizeState(raw, host='O'){
 }
 function isGameOver(s){ return (s?.data?.O?.hp ?? 100) <= 0 || (s?.data?.X?.hp ?? 100) <= 0; }
 function setOverlay(msg){
-  document.getElementById('overlayWait').style.display = 'flex';
-  document.getElementById('overlayMsg').textContent = msg;
+  const overlay = document.getElementById('overlayWait');
+  const msgEl = document.getElementById('overlayMsg');
+  overlay.style.display = 'flex';
+  msgEl.textContent = msg;
 }
 function hideOverlay(){ document.getElementById('overlayWait').style.display = 'none'; }
+function setBoardLock(canAct, msg){
+  const boardWrap = document.getElementById('board-wrap');
+  const skillWrap = document.getElementById('skill-footer-wrap');
+  const boardMask = document.getElementById('board-lock-mask');
+  const skillMask = document.getElementById('skill-lock-mask');
+  if(canAct){
+    boardWrap.classList.remove('interaction-locked');
+    skillWrap.classList.remove('interaction-locked');
+    boardEl.style.pointerEvents = 'auto';
+    document.getElementById('skill-list-container').style.pointerEvents = 'auto';
+    boardMask.textContent = '';
+    skillMask.textContent = '';
+  } else {
+    boardWrap.classList.add('interaction-locked');
+    skillWrap.classList.add('interaction-locked');
+    boardEl.style.pointerEvents = 'none';
+    document.getElementById('skill-list-container').style.pointerEvents = 'none';
+    boardMask.textContent = msg || '等待對手回合';
+    skillMask.textContent = msg || '不是你的操作階段';
+  }
+}
 function applyPerspective(){
   const panelO = document.getElementById('panel-O');
   const panelX = document.getElementById('panel-X');
   const badgeO = document.getElementById('badge-O');
   const badgeX = document.getElementById('badge-X');
-  const boardWrap = document.getElementById('board-wrap');
-  const skillWrap = document.getElementById('skill-footer-wrap');
   panelO.classList.remove('my-side','enemy-side','active-side-O','active-side-X');
   panelX.classList.remove('my-side','enemy-side','active-side-O','active-side-X');
   badgeO.classList.remove('me','enemy');
   badgeX.classList.remove('me','enemy');
-  boardWrap.classList.remove('interaction-locked');
-  skillWrap.classList.remove('interaction-locked');
   if(myRole==='O'){
     panelO.classList.add('my-side'); panelX.classList.add('enemy-side');
     badgeO.classList.add('me'); badgeX.classList.add('enemy');
@@ -87,14 +106,27 @@ function applyPerspective(){
   }
   if(state?.turn === 'O') panelO.classList.add('active-side-O');
   if(state?.turn === 'X') panelX.classList.add('active-side-X');
-  if(roomCache?.phase !== 'playing' || state?.turn !== myRole || isGameOver(state)){
-    boardWrap.classList.add('interaction-locked');
-    skillWrap.classList.add('interaction-locked');
-  }
+}
+function renderSkills(){
+  const skills = [
+    {t:'atk', c:1, label:'攻擊'},
+    {t:'def', c:2, label:'防禦'},
+    {t:'hel', c:2, label:'回血'},
+    {t:'stn', c:3, label:'暈眩'}
+  ];
+  const myData = state?.data?.[myRole] || basePlayer();
+  const phase = roomCache?.phase;
+  const canAct = phase === 'playing' && state?.turn === myRole && !isGameOver(state);
+  document.getElementById('skill-list-container').innerHTML = skills.map(s=>{
+    const can = canAct && myData.sp >= s.c && myData.skillUsed < 3;
+    return `<button class="s-btn btn-${s.t} ${can ? 'active' : ''}" data-skill="${s.t}" title="${s.label}"></button>`;
+  }).join('');
+  document.querySelectorAll('[data-skill]').forEach(btn => btn.addEventListener('click', ()=>useSkill(btn.dataset.skill)));
 }
 function render(){
   if(!state) return;
-  const phase = roomCache?.phase;
+  const phase = roomCache?.phase || 'playing';
+
   if(phase === 'playing') hideOverlay();
   else if(phase === 'countdown') setOverlay(document.getElementById('overlayMsg').textContent || '倒數中…');
   else if(phase === 'ended') setOverlay(roomCache?.winner === myRole ? '你獲勝了' : '戰鬥結束');
@@ -126,15 +158,18 @@ function render(){
     el.className = 'cell ' + v;
   }
 
-  const skills = [{t:'atk', c:1}, {t:'def', c:2}, {t:'hel', c:2}, {t:'stn', c:3}];
-  const myData = state.data?.[myRole] || basePlayer();
-  document.getElementById('skill-list-container').innerHTML = skills.map(s=>{
-    const can = roomCache?.phase==='playing' && state.turn===myRole && myData.sp >= s.c && myData.skillUsed < 3 && !isGameOver(state);
-    return `<button class="s-btn btn-${s.t} ${can ? 'active' : ''}" data-skill="${s.t}" aria-label="${s.t}"></button>`;
-  }).join('');
-  document.querySelectorAll('[data-skill]').forEach(btn => btn.addEventListener('click', ()=>useSkill(btn.dataset.skill)));
-
+  renderSkills();
   applyPerspective();
+
+  const canAct = phase === 'playing' && state.turn === myRole && !isGameOver(state);
+  const lockMsg = phase !== 'playing'
+    ? '等待戰鬥開始'
+    : isGameOver(state)
+      ? '戰鬥已結束'
+      : state.turn !== myRole
+        ? '等待對手回合'
+        : '';
+  setBoardLock(canAct, lockMsg);
 }
 function swapTurnLocal(s){
   s.data[s.turn].skillUsed = 0;
@@ -150,7 +185,11 @@ function swapTurnLocal(s){
 function resetGridLocal(s){ s.grid = Array(9).fill(null); s.queues = { O: [], X: [] }; return swapTurnLocal(s); }
 async function pushState(newState){ await update(roomRef, { state: newState }); }
 async function tap(i){
-  if(!state || roomCache?.phase !== 'playing' || state.turn !== myRole || state.grid[i] || isGameOver(state)) return;
+  if(!state) return;
+  if((roomCache?.phase || 'playing') !== 'playing') return;
+  if(state.turn !== myRole) return;
+  if(state.grid[i]) return;
+  if(isGameOver(state)) return;
   const s = clone(state);
   if(s.queues[s.turn].length >= 3){ const old = s.queues[s.turn].shift(); s.grid[old] = null; }
   s.grid[i] = s.turn; s.queues[s.turn].push(i);
@@ -159,7 +198,10 @@ async function tap(i){
   await pushState(s);
 }
 async function useSkill(type){
-  if(!state || roomCache?.phase !== 'playing' || state.turn !== myRole || isGameOver(state)) return;
+  if(!state) return;
+  if((roomCache?.phase || 'playing') !== 'playing') return;
+  if(state.turn !== myRole) return;
+  if(isGameOver(state)) return;
   const s = clone(state); const p = s.turn; const target = p === 'O' ? 'X' : 'O';
   if(s.data[p].skillUsed >= 3) return;
   const cost = type==='atk' ? 1 : type==='stn' ? 3 : 2; if(s.data[p].sp < cost) return;
@@ -184,13 +226,18 @@ onValue(roomRef, async snap => {
   const room = snap.val();
   if(!room){ location.href = './index.html'; return; }
   roomCache = room;
+
   const normalized = normalizeState(room.state, room.host || 'O');
   state = normalized;
+
   const normalizedJSON = JSON.stringify(normalized);
   if(normalizedJSON !== JSON.stringify(room.state || {}) && normalizedJSON !== lastNormalizedJSON){
     lastNormalizedJSON = normalizedJSON;
     try { await update(roomRef, { state: normalized }); } catch {}
   }
+
   if(room.phase === 'countdown' && room.startAt) startCountdown(room.startAt);
+
+  if(!room.phase) roomCache.phase = 'playing';
   render();
 });
