@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>光影對決｜房間等待</title>
+<style>
+  body{margin:0;font-family:"Microsoft JhengHei",sans-serif;background:#050816;color:#fff;min-height:100vh;display:flex;align-items:center;justify-content:center;overflow:hidden}
+  .bg{position:fixed;inset:0;background:#050816 url('Gemini_Generated_Image_axefmzaxefmzaxef.jpg') center/cover no-repeat;filter:brightness(.28);z-index:-2}
+  .shell{width:min(94vw,920px);background:rgba(0,0,0,.72);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.14);border-radius:28px;padding:28px;box-shadow:0 0 40px rgba(0,0,0,.28)}
+  h1{margin:0 0 8px;font-size:2.4rem;color:#00d4ff;text-align:center}
+  .sub{opacity:.86;text-align:center;margin-bottom:22px}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  .card{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:20px;padding:18px}
+  .card h2{margin:0 0 12px;font-size:1.2rem}
+  .controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+  input,select,button{height:42px;border-radius:12px;border:1px solid rgba(255,255,255,.14);padding:0 12px;font-size:1rem}
+  input,select{background:rgba(0,0,0,.4);color:#fff}
+  button{background:linear-gradient(90deg,#00c6ff,#0072ff);color:#fff;font-weight:900;cursor:pointer}
+  button.secondary{background:rgba(255,255,255,.1)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .roomcode{font-size:1.5rem;font-weight:900;color:#f6d26a;letter-spacing:2px}
+  .state-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+  .state-box{padding:12px;border-radius:16px;background:rgba(255,255,255,.06)}
+  .state-box strong{display:block;margin-bottom:6px}
+  .ok{color:#7CFFB2}.warn{color:#ffd166}.bad{color:#ff8f8f}
+  .status{margin-top:14px;padding:12px 14px;border-radius:14px;background:rgba(0,212,255,.12);border:1px solid rgba(0,212,255,.28);min-height:24px}
+  .countdown{margin-top:14px;font-size:2.4rem;font-weight:900;text-align:center;color:#00d4ff;display:none}
+  .tips{margin-top:14px;opacity:.82;font-size:.95rem;line-height:1.6}
+  @media (max-width:780px){.row{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="bg"></div>
+<div class="shell">
+  <h1>光影對決</h1>
+  <div class="sub">先進房、再準備，雙方完成後才進入戰鬥頁</div>
+  <div class="row">
+    <div class="card">
+      <h2>房間操作</h2>
+      <div class="controls">
+        <select id="roleSelect">
+          <option value="O">光 / O</option>
+          <option value="X">影 / X</option>
+        </select>
+        <button id="createBtn">建立房間</button>
+      </div>
+      <div class="controls" style="margin-top:10px">
+        <input id="roomInput" placeholder="輸入房號" maxlength="8" />
+        <button id="joinBtn">加入房間</button>
+        <button id="copyBtn" class="secondary">複製房號</button>
+      </div>
+      <div class="tips">規則：房主建立房間後，另一位輸入房號加入。雙方都按準備才會開始。</div>
+    </div>
+    <div class="card">
+      <h2>目前房間</h2>
+      <div>房號：<span id="roomCode" class="roomcode">未建立</span></div>
+      <div style="margin-top:8px">你的身份：<strong id="myRoleText">未加入</strong></div>
+      <div class="state-grid">
+        <div class="state-box"><strong>光 / O</strong><div id="statusO">未加入</div></div>
+        <div class="state-box"><strong>影 / X</strong><div id="statusX">未加入</div></div>
+      </div>
+      <div class="controls" style="margin-top:14px">
+        <button id="readyBtn" disabled>準備</button>
+        <button id="leaveBtn" class="secondary" disabled>離開房間</button>
+      </div>
+      <div id="statusText" class="status">尚未加入房間</div>
+      <div id="countdownText" class="countdown">3</div>
+    </div>
+  </div>
+</div>
+<script type="module" src="./lobby.js"></script>
+</body>
+</html>
